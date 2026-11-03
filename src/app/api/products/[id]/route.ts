@@ -22,7 +22,9 @@ export async function PATCH(req:NextRequest,{params}:{params:Promise<{id:string}
   const existing=await prisma.product.findUnique({where:{id},include:{stockBalances:true}});
   if(!existing)return NextResponse.json({error:"Product not found"},{status:404});
   if(input.active===false&&existing.stockBalances.reduce((s,b)=>s+Number(b.quantity),0)>0)return NextResponse.json({error:"Cannot archive a product while stock remains. Transfer, sell or adjust stock to zero first."},{status:400});
-  if(input.trackExpiry===true&&input.trackBatch===false)return NextResponse.json({error:"Expiry tracking requires batch tracking."},{status:400});
+  const nextTrackBatch=input.trackBatch??existing.trackBatch;
+  const nextTrackExpiry=input.trackExpiry??existing.trackExpiry;
+  if(nextTrackExpiry&&!nextTrackBatch)return NextResponse.json({error:"Expiry tracking requires batch tracking."},{status:400});
   if(input.barcode!==undefined&&input.barcode!==null&&input.barcode.trim()==="")input.barcode=null;
   const data=await prisma.$transaction(async tx=>{
    const product=await tx.product.update({where:{id},data:input});
