@@ -36,13 +36,13 @@ export async function postSale(tx:Tx,input:{
   const products=await tx.product.findMany({where:{id:{in:productIds},active:true}});
   if(products.length!==productIds.length) throw new Error("One or more products are unavailable");
   const todayKey=indiaDateKey(new Date());
-  const expanded:{productId:string;batchId:string|null;quantity:number;unitPrice:number;discount:number;taxRate:number;lineTotal:number}[]=[];
+  const expanded:{productId:string;batchId:string|null;quantity:number;unitCost:number;unitPrice:number;discount:number;taxRate:number;lineTotal:number}[]=[];
   for(const item of input.items){
     const baseTotal=item.quantity*item.unitPrice-(item.discount??0);
     if(baseTotal<0) throw new Error("Discount cannot exceed line value");
     const allocations:{batchId:string|null;quantity:number}[]=[];
     if(item.batchId){
-      const selected=await tx.batch.findUnique({where:{id:item.batchId},select:{productId:true,expiryDate:true}});
+      const selected=await tx.batch.findUnique({where:{id:item.batchId},select:{productId:true,expiryDate:true,costPrice:true}});
       if(!selected||selected.productId!==item.productId)throw new Error("Selected batch does not belong to this SKU");
       if(selected.expiryDate&&indiaDateKey(selected.expiryDate)<todayKey)throw new Error("Expired batch cannot be sold");
       allocations.push({batchId:item.batchId,quantity:item.quantity});
@@ -64,11 +64,14 @@ export async function postSale(tx:Tx,input:{
       if(remaining>0)throw new Error("Insufficient unexpired stock for "+item.productId+" in the selected warehouse");
     }
     for(const allocation of allocations){
+      const product=products.find(x=>x.id===item.productId)!;
+      const batch=allocation.batchId?await tx.batch.findUnique({where:{id:allocation.batchId},select:{costPrice:true}}):null;
+      const unitCost=Number(batch?.costPrice??product.costPrice);
       const ratio=allocation.quantity/item.quantity;
       const discount=(item.discount??0)*ratio;
       const base=allocation.quantity*item.unitPrice-discount;
       const taxRate=item.taxRate??0;
-      expanded.push({productId:item.productId,batchId:allocation.batchId,quantity:allocation.quantity,unitPrice:item.unitPrice,discount,taxRate,lineTotal:base+base*taxRate/100});
+      expanded.push({productId:item.productId,batchId:allocation.batchId,quantity:allocation.quantity,unitCost,unitPrice:item.unitPrice,discount,taxRate,lineTotal:base+base*taxRate/100});
     }
   }
   const subtotal=expanded.reduce((s,l)=>s+l.quantity*l.unitPrice,0);
@@ -79,13 +82,13 @@ export async function postSale(tx:Tx,input:{
     number:input.number,customerId:input.customerId,status:"APPROVED",paymentStatus:"UNPAID",
     subtotal,discount,taxTotal,grandTotal,notes:input.notes,
     items:{create:expanded.map(l=>({
-      productId:l.productId,batchId:l.batchId??undefined,quantity:l.quantity,unitPrice:l.unitPrice,
+      productId:l.productId,batchId:l.batchId??undefined,quantity:l.quantity,unitCost:l.unitCost,unitPrice:l.unitPrice,
       discount:l.discount,taxRate:l.taxRate,lineTotal:l.lineTotal
     }))}
   }});
   for(const line of expanded) await changeStock(tx,{
     productId:line.productId,warehouseId:input.warehouseId,batchId:line.batchId,
-    quantity:-line.quantity,type:"SALE",referenceType:"SALE",referenceId:sale.id,notes:input.number,actorId:input.actorId
+    quantity:-line.quantity,type:"SALE",unitCost:line.unitCost,referenceType:"SALE",referenceId:sale.id,notes:input.number,actorId:input.actorId
   });
   return sale;
 }
