@@ -43,17 +43,20 @@ export async function POST(req:NextRequest){
     const product=await tx.product.findUnique({where:{id:item.productId}});
     if(!product||!product.active)throw new Error("Product is missing or inactive.");
     let originalQty:number|undefined;
+    let unitCost=Number(product.costPrice);
     if(sourceSale){
       const original=sourceSale.items.find(x=>x.productId===item.productId&&(x.batchId??null)===(item.batchId??null));
       if(!original)throw new Error("A sales return item must match a product and batch on the original invoice.");
       const previous=await tx.returnItem.aggregate({where:{productId:item.productId,batchId:item.batchId??null,returnDocument:{is:{kind:"SALES_RETURN",sourceSaleId:sourceSale.id,status:"APPROVED"}}},_sum:{quantity:true}});
       originalQty=Number(original.quantity)-Number(previous._sum.quantity??0);
+      unitCost=Number(original.unitCost);
     }
     if(sourcePurchase){
       const original=sourcePurchase.items.find(x=>x.productId===item.productId&&(x.batchId??null)===(item.batchId??null));
       if(!original)throw new Error("A purchase return item must match a product and batch on the original bill.");
       const previous=await tx.returnItem.aggregate({where:{productId:item.productId,batchId:item.batchId??null,returnDocument:{is:{kind:"PURCHASE_RETURN",sourcePurchaseId:sourcePurchase.id,status:"APPROVED"}}},_sum:{quantity:true}});
       originalQty=Number(original.receivedQuantity)-Number(previous._sum.quantity??0);
+      unitCost=Number(original.unitCost);
     }
     if(originalQty!==undefined&&item.quantity>originalQty+0.0001)throw new Error("Return quantity exceeds the unreturned quantity on the original document.");
     if(item.batchId){
@@ -61,7 +64,7 @@ export async function POST(req:NextRequest){
       if(!batch||batch.productId!==item.productId)throw new Error("Selected batch does not match the product.");
     }
     const base=item.quantity*item.unitValue;
-    lines.push({...item,lineTotal:base+base*item.taxRate/100});
+    lines.push({...item,unitCost,lineTotal:base+base*item.taxRate/100});
    }
    const subtotal=lines.reduce((s,x)=>s+x.quantity*x.unitValue,0);
    const grandTotal=lines.reduce((s,x)=>s+x.lineTotal,0);
@@ -71,7 +74,7 @@ export async function POST(req:NextRequest){
     customerId:sourceSale?.customerId??undefined,supplierId:sourcePurchase?.supplierId??undefined,
     sourceSaleId:sourceSale?.id,sourcePurchaseId:sourcePurchase?.id,
     subtotal,taxTotal,grandTotal,notes:input.notes,createdBy:auth.userId,
-    items:{create:lines.map(x=>({productId:x.productId,batchId:x.batchId,quantity:x.quantity,unitValue:x.unitValue,taxRate:x.taxRate,lineTotal:x.lineTotal}))}
+    items:{create:lines.map(x=>({productId:x.productId,batchId:x.batchId,quantity:x.quantity,unitCost:x.unitCost,unitValue:x.unitValue,taxRate:x.taxRate,lineTotal:x.lineTotal}))}
    }});
    for(const line of lines){
     await changeStock(tx,{
