@@ -7,4 +7,4 @@ const schema=z.object({number:z.string().min(1),supplierId:z.string().min(1),war
 export async function GET(){const data=await prisma.purchase.findMany({include:{supplier:true,items:{include:{product:true}}},orderBy:{invoiceDate:"desc"},take:100});return NextResponse.json({data});}
 export async function POST(req:NextRequest){
  const auth=await requireRole(req,["OWNER","ADMIN","MANAGER","INVENTORY"]);if(denied(auth))return auth;
- try{const input=schema.parse(await req.json());const data=await prisma.$transaction(tx=>postPurchase(tx,input),{isolationLevel:"Serializable"});return NextResponse.json({data},{status:201});}catch(e){const message=e instanceof Error?e.message:"Invalid purchase";return NextResponse.json({error:message},{status:400});}}
+ try{const input=schema.parse(await req.json());const data=await prisma.$transaction(tx=>postPurchase(tx,{...input,actorId:auth.userId}),{isolationLevel:"Serializable"});return NextResponse.json({data},{status:201});}catch(e){const message=e instanceof Error?e.message:"Invalid purchase";return NextResponse.json({error:message},{status:400});}}
