@@ -14,6 +14,7 @@ export async function POST(req:NextRequest){
   else if(x.type==="supplier")data=await prisma.supplier.create({data:{name:x.name.trim(),code:x.code||undefined,gstin:x.gstin||undefined,phone:x.phone||undefined,email:x.email||undefined,address:x.address||undefined}});
   else if(x.type==="customer")data=await prisma.customer.create({data:{name:x.name.trim(),phone:x.phone||undefined,email:x.email||undefined,gstin:x.gstin||undefined,billingAddress:x.address||undefined}});
   else return NextResponse.json({error:"Unknown master type"},{status:400});
+  await prisma.auditLog.create({data:{userId:auth.userId,action:"MASTER_CREATED",entity:"MASTER",entityId:data.id,after:{type:x.type,name:x.name}}});
   return NextResponse.json({data},{status:201});
  }catch{return NextResponse.json({error:"Could not create record; check duplicate name, code or email."},{status:409});}
 }
