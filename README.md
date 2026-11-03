@@ -29,7 +29,7 @@ A stock and operations system starter tailored for Cosmosentials.
    cd Inventory-
    git checkout feat/inventory-system
    npm install
-   cp .env.example .env
+   Copy-Item .env.example .env (PowerShell) / cp .env.example .env (macOS/Linux)
    ~~~
 3. Set your local owner password and a unique AUTH_SECRET in .env.
 4. Start PostgreSQL and initialize:
@@ -42,7 +42,7 @@ A stock and operations system starter tailored for Cosmosentials.
    ~~~
 5. Open http://localhost:3000 and sign in using the owner email/password configured in .env.
 
-Full instructions: docs/SETUP.md.
+Full Windows, database, CSV import, testing and deployment instructions: docs/SETUP.md. Set SEED_DEMO_DATA=false for a clean real inventory database; demo stock is opt-in only.
 
 ## Important
 - Seeded Cosmosentials products and their quantities are sample records, not live stock.
