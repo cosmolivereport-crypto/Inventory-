@@ -1,6 +1,8 @@
-import {NextResponse} from "next/server";
+import {requireRole,denied} from "@/lib/authorization";
+import {NextRequest,NextResponse} from "next/server";
 import {prisma} from "@/lib/prisma";
-export async function GET(){
+export async function GET(req:NextRequest){
+ const auth=await requireRole(req,["OWNER","ADMIN","MANAGER","INVENTORY","ACCOUNTANT"]);if(denied(auth))return auth;
  try{
   const balances=await prisma.stockBalance.findMany({include:{product:{include:{category:true,brand:true,unit:true}},warehouse:true,batch:true},orderBy:[{product:{name:"asc"}},{warehouse:{name:"asc"}}]});
   const header=["SKU","Barcode","Product","Category","Brand","Warehouse","Batch","Expiry date","Quantity","Unit","Cost price","MRP","Stock value"];
