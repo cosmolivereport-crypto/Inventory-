@@ -20,7 +20,7 @@ export async function GET(req:NextRequest){
   const cogs=saleLines.reduce((s,x)=>s+Number(x.quantity)*Number(x.unitCost),0);
   const returnedCogs=returnedLines.reduce((s,x)=>s+Number(x.quantity)*Number(x.unitCost),0);
   const revenue=Number(sales._sum.subtotal??0)-Number(sales._sum.discount??0)-Number(salesReturns._sum.subtotal??0);
-  const netCogs=Math.max(0,cogs-returnedCogs);
+  const netCogs=cogs-returnedCogs;
   const grossProfit=revenue-netCogs;
   const operatingExpenses=Number(expenses._sum.amount??0);
   return NextResponse.json({
