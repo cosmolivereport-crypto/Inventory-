@@ -6,7 +6,7 @@ import { changeStock } from "@/lib/inventory";
 const createProductSchema = z.object({
  sku:z.string().trim().min(1).max(80),name:z.string().trim().min(1).max(200),barcode:z.string().trim().optional(),
  categoryId:z.string().optional(),brandId:z.string().optional(),unitId:z.string().optional(),hsnCode:z.string().trim().optional(),
- gstRate:z.number().min(0).max(100).default(0),costPrice:z.number().min(0),sellingPrice:z.number().min(0),
+ gstRate:z.number().min(0).max(100).default(0),trackBatch:z.boolean().default(true),trackExpiry:z.boolean().default(true),costPrice:z.number().min(0),sellingPrice:z.number().min(0),
  mrp:z.number().min(0),reorderLevel:z.number().min(0).default(0),description:z.string().optional(),
  openingStock:z.number().min(0).default(0),warehouseId:z.string().optional(),batchNumber:z.string().optional(),expiryDate:z.string().optional()
 });
@@ -22,11 +22,14 @@ export async function POST(req:NextRequest){
   const product=await prisma.$transaction(async tx=>{
    const created=await tx.product.create({data:productData});
    if(openingStock>0){
+    if(created.trackBatch&&!batchNumber)throw new Error("Batch number is required for opening stock");
+    if(created.trackExpiry&&!expiryDate)throw new Error("Expiry date is required for this product");
     if(!warehouseId)throw new Error("Select a warehouse for opening stock");
     let batchId:string|undefined;
     if(batchNumber){const batch=await tx.batch.create({data:{productId:created.id,batchNumber,expiryDate:expiryDate?new Date(expiryDate):undefined,costPrice:created.costPrice}});batchId=batch.id;}
     await changeStock(tx,{productId:created.id,warehouseId,batchId,quantity:openingStock,type:"OPENING",unitCost:Number(created.costPrice),referenceType:"PRODUCT_OPENING",referenceId:created.id,notes:"Opening stock at product creation",actorId:auth.userId});
    }
+   await tx.auditLog.create({data:{userId:auth.userId,action:"PRODUCT_CREATED",entity:"PRODUCT",entityId:created.id,after:{sku:created.sku,name:created.name}}});
    return created;
   },{isolationLevel:"Serializable"});
   return NextResponse.json({data:product},{status:201});
