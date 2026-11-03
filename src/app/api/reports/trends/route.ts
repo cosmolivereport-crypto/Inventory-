@@ -1,6 +1,8 @@
-import {NextResponse} from "next/server";
+import {requireRole,denied} from "@/lib/authorization";
+import {NextRequest,NextResponse} from "next/server";
 import {prisma} from "@/lib/prisma";
-export async function GET(){
+export async function GET(req:NextRequest){
+ const auth=await requireRole(req,["OWNER","ADMIN","MANAGER","ACCOUNTANT"]);if(denied(auth))return auth;
  try{
   const now=new Date(),start=new Date(now.getFullYear(),now.getMonth()-5,1);
   const [sales,purchases]=await Promise.all([
