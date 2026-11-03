@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import {hash} from "bcryptjs";
 const prisma = new PrismaClient();
 async function main() {
   const categories = ["Face Wash","Serum","Cream","Hair Care","Soap","Sunscreen","Moisturizer"];
@@ -25,5 +26,15 @@ async function main() {
       if (p.qty) await prisma.stockMovement.create({data:{productId:product.id,warehouseId:warehouse.id,batchId:batch.id,type:"OPENING",quantity:p.qty,unitCost:p.cost,referenceType:"SEED",referenceId:"OPENING-STOCK",notes:"Initial demo opening balance"}});
     }
   }
+  const email=process.env.INITIAL_ADMIN_EMAIL?.trim().toLowerCase();
+  const password=process.env.INITIAL_ADMIN_PASSWORD;
+  if(email && password){
+    if(password.length<14) throw new Error("INITIAL_ADMIN_PASSWORD must contain at least 14 characters");
+    const passwordHash=await hash(password,12);
+    await prisma.user.upsert({where:{email},update:{},create:{email,name:process.env.INITIAL_ADMIN_NAME||"System Owner",passwordHash,role:"OWNER"}});
+    console.log("Initial owner account ensured for",email);
+  }else{
+    console.log("No initial owner created. Set INITIAL_ADMIN_EMAIL and INITIAL_ADMIN_PASSWORD, then rerun the seed.");
+  }
 }
-main().finally(()=>prisma.$disconnect());
+main().catch(e=>{console.error(e);process.exit(1);}).finally(()=>prisma.$disconnect());
