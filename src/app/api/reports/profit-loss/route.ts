@@ -16,7 +16,7 @@ export async function GET(req:NextRequest){
    prisma.returnDocument.aggregate({where:{kind:"PURCHASE_RETURN",status:"APPROVED",createdAt:{gte:from,lte:to}},_sum:{grandTotal:true}})
   ]);
   const cogs=saleLines.reduce((s,x)=>s+Number(x.quantity)*Number(x.unitCost),0);
-  const returnedCogs=returnedLines.reduce((s,x)=>s+Number(x.quantity)*Number(x.batch?.costPrice??x.product.costPrice),0);
+  const returnedCogs=returnedLines.reduce((s,x)=>s+Number(x.quantity)*Number(x.unitCost),0);
   const revenue=Number(sales._sum.grandTotal??0)-Number(salesReturns._sum.grandTotal??0);
   const netCogs=Math.max(0,cogs-returnedCogs);
   const grossProfit=revenue-netCogs;
@@ -28,7 +28,7 @@ export async function GET(req:NextRequest){
    purchaseReturns:Number(purchaseReturns._sum.grandTotal??0),
    costOfGoodsSold:netCogs,grossProfit,operatingExpenses,netProfit:grossProfit-operatingExpenses,
    grossMarginPercent:revenue>0?grossProfit/revenue*100:0,
-   sourceNote:"COGS uses batch purchase cost where available, otherwise product master cost. Expenses include entries recorded in the selected period."
+   sourceNote:"COGS uses the per-sale unit cost captured when the invoice was posted. Expenses include entries recorded in the selected period."
   });
  }catch{return NextResponse.json({error:"Could not calculate profit and loss report"},{status:503});}
 }
