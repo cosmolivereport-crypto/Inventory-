@@ -1,3 +1,4 @@
+import {requireRole,denied} from "@/lib/authorization";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
@@ -13,8 +14,9 @@ export async function GET(req:NextRequest) {
  try {const q=req.nextUrl.searchParams.get("q")?.trim();const products=await prisma.product.findMany({where:{active:true,...(q?{OR:[{sku:{contains:q,mode:"insensitive"}},{name:{contains:q,mode:"insensitive"}}]}:{})},include:{category:true,brand:true,unit:true,stockBalances:{include:{warehouse:true,batch:true}}},orderBy:{name:"asc"}});return NextResponse.json({data:products});}
  catch{return NextResponse.json({error:"Could not load products. Check database configuration."},{status:503});}
 }
-export async function POST(req:NextRequest) {
- try {
+export async function POST(req:NextRequest){
+ const auth=await requireRole(req,["OWNER","ADMIN","MANAGER","INVENTORY"]);if(denied(auth))return auth;
+ try{
   const input=createProductSchema.parse(await req.json());
   const {openingStock,warehouseId,batchNumber,expiryDate,...productData}=input;
   const product=await prisma.$transaction(async tx=>{
