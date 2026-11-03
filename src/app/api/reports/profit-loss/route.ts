@@ -15,7 +15,7 @@ export async function GET(req:NextRequest){
    prisma.purchase.aggregate({where:{status:"RECEIVED",invoiceDate:{gte:from,lte:to}},_sum:{grandTotal:true}}),
    prisma.returnDocument.aggregate({where:{kind:"PURCHASE_RETURN",status:"APPROVED",createdAt:{gte:from,lte:to}},_sum:{grandTotal:true}})
   ]);
-  const cogs=saleLines.reduce((s,x)=>s+Number(x.quantity)*Number(x.batch?.costPrice??x.product.costPrice),0);
+  const cogs=saleLines.reduce((s,x)=>s+Number(x.quantity)*Number(x.unitCost),0);
   const returnedCogs=returnedLines.reduce((s,x)=>s+Number(x.quantity)*Number(x.batch?.costPrice??x.product.costPrice),0);
   const revenue=Number(sales._sum.grandTotal??0)-Number(salesReturns._sum.grandTotal??0);
   const netCogs=Math.max(0,cogs-returnedCogs);
