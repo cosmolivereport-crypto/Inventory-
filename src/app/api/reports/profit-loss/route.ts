@@ -10,25 +10,25 @@ export async function GET(req:NextRequest){
    prisma.sale.aggregate({where:{status:"APPROVED",invoiceDate:{gte:from,lte:to}},_sum:{grandTotal:true,subtotal:true,taxTotal:true,discount:true}}),
    prisma.saleItem.findMany({where:{sale:{status:"APPROVED",invoiceDate:{gte:from,lte:to}}},include:{product:true,batch:true}}),
    prisma.expense.aggregate({where:{date:{gte:from,lte:to}},_sum:{amount:true}}),
-   prisma.returnDocument.aggregate({where:{kind:"SALES_RETURN",status:"APPROVED",createdAt:{gte:from,lte:to}},_sum:{grandTotal:true}}),
+   prisma.returnDocument.aggregate({where:{kind:"SALES_RETURN",status:"APPROVED",createdAt:{gte:from,lte:to}},_sum:{grandTotal:true,subtotal:true}}),
    prisma.returnItem.findMany({where:{returnDocument:{is:{kind:"SALES_RETURN",status:"APPROVED",createdAt:{gte:from,lte:to}}}},include:{product:true,batch:true}}),
    prisma.purchase.aggregate({where:{status:"RECEIVED",invoiceDate:{gte:from,lte:to}},_sum:{grandTotal:true}}),
    prisma.returnDocument.aggregate({where:{kind:"PURCHASE_RETURN",status:"APPROVED",createdAt:{gte:from,lte:to}},_sum:{grandTotal:true}})
   ]);
   const cogs=saleLines.reduce((s,x)=>s+Number(x.quantity)*Number(x.unitCost),0);
   const returnedCogs=returnedLines.reduce((s,x)=>s+Number(x.quantity)*Number(x.unitCost),0);
-  const revenue=Number(sales._sum.grandTotal??0)-Number(salesReturns._sum.grandTotal??0);
+  const revenue=Number(sales._sum.subtotal??0)-Number(sales._sum.discount??0)-Number(salesReturns._sum.subtotal??0);
   const netCogs=Math.max(0,cogs-returnedCogs);
   const grossProfit=revenue-netCogs;
   const operatingExpenses=Number(expenses._sum.amount??0);
   return NextResponse.json({
    period:{from:from.toISOString(),to:to.toISOString()},
    grossSales:Number(sales._sum.grandTotal??0),salesReturns:Number(salesReturns._sum.grandTotal??0),
-   netRevenue:revenue,purchaseBills:Number(purchases._sum.grandTotal??0),
+   salesTaxCollected:Number(sales._sum.taxTotal??0),netRevenue:revenue,purchaseBills:Number(purchases._sum.grandTotal??0),
    purchaseReturns:Number(purchaseReturns._sum.grandTotal??0),
    costOfGoodsSold:netCogs,grossProfit,operatingExpenses,netProfit:grossProfit-operatingExpenses,
    grossMarginPercent:revenue>0?grossProfit/revenue*100:0,
-   sourceNote:"COGS uses the per-sale unit cost captured when the invoice was posted. Expenses include entries recorded in the selected period."
+   sourceNote:"Net revenue excludes the recorded sales tax. COGS uses immutable per-sale unit costs; approved sales-return quantities reverse their original cost. Expenses include entries recorded in the selected period. Validate GST, returns and statutory accounting with your accountant."
   });
  }catch{return NextResponse.json({error:"Could not calculate profit and loss report"},{status:503});}
 }
