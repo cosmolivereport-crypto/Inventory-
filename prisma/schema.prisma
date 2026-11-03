@@ -96,6 +96,7 @@ model Product {
  movements StockMovement[]
  purchaseItems PurchaseItem[]
  saleItems SaleItem[]
+ returnItems ReturnItem[]
  createdAt DateTime @default(now())
  updatedAt DateTime @updatedAt
  @@index([name])
