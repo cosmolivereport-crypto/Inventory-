@@ -1,0 +1,27 @@
+import {requireRole,denied} from "@/lib/authorization";
+import {NextRequest,NextResponse} from "next/server";
+import {z} from "zod";
+import {prisma} from "@/lib/prisma";
+import {changeStock} from "@/lib/inventory";
+const schema=z.object({
+ number:z.string().min(1),warehouseId:z.string().min(1),reason:z.string().min(1),notes:z.string().optional(),
+ items:z.array(z.object({productId:z.string(),batchId:z.string().optional(),countedQuantity:z.number().nonnegative()})).min(1)
+});
+export async function POST(req:NextRequest){
+ const auth=await requireRole(req,["OWNER","ADMIN","MANAGER","INVENTORY"]);if(denied(auth))return auth;
+ try{
+  const input=schema.parse(await req.json());
+  const result=await prisma.$transaction(async tx=>{
+   const adjustment=await tx.stockAdjustment.create({data:{number:input.number,warehouseId:input.warehouseId,reason:input.reason,notes:input.notes}});
+   for(const i of input.items){
+    const current=await tx.stockBalance.findFirst({where:{productId:i.productId,warehouseId:input.warehouseId,batchId:i.batchId??null}});
+    const systemQuantity=Number(current?.quantity??0);
+    const difference=i.countedQuantity-systemQuantity;
+    await tx.stockAdjustmentItem.create({data:{adjustmentId:adjustment.id,productId:i.productId,batchId:i.batchId,systemQuantity,countedQuantity:i.countedQuantity,difference}});
+    if(difference!==0)await changeStock(tx,{productId:i.productId,warehouseId:input.warehouseId,batchId:i.batchId,quantity:difference,type:"ADJUSTMENT",referenceType:"STOCK_ADJUSTMENT",referenceId:adjustment.id,notes:input.reason,actorId:auth.userId});
+   }
+   return adjustment;
+  },{isolationLevel:"Serializable"});
+  return NextResponse.json({data:result},{status:201});
+ }catch(e){return NextResponse.json({error:e instanceof Error?e.message:"Invalid adjustment"},{status:400});}
+}
