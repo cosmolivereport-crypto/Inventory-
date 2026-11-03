@@ -12,6 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/cosmo_inventory
+      DIRECT_URL: postgresql://postgres:postgres@localhost:5432/cosmo_inventory
     services:
       postgres:
         image: postgres:16
