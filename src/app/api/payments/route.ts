@@ -12,7 +12,8 @@ const schema=z.object({
  if(v.referenceType==="SALE"&&(v.direction!=="IN"||v.partyType!=="CUSTOMER"))ctx.addIssue({code:"custom",message:"Sale invoices require a customer receipt.",path:["direction"]});
  if(v.referenceType==="PURCHASE"&&(v.direction!=="OUT"||v.partyType!=="SUPPLIER"))ctx.addIssue({code:"custom",message:"Purchase bills require a supplier payment.",path:["direction"]});
 });
-export async function GET(){try{const data=await prisma.payment.findMany({orderBy:{transactionDate:"desc"},take:200});return NextResponse.json({data});}catch{return NextResponse.json({error:"Could not load payments"},{status:503});}}
+export async function GET(req:NextRequest){
+ const auth=await requireRole(req,["OWNER","ADMIN","ACCOUNTANT"]);if(denied(auth))return auth;try{const data=await prisma.payment.findMany({orderBy:{transactionDate:"desc"},take:200});return NextResponse.json({data});}catch{return NextResponse.json({error:"Could not load payments"},{status:503});}}
 export async function POST(req:NextRequest){
  const auth=await requireRole(req,["OWNER","ADMIN","ACCOUNTANT"]);if(denied(auth))return auth;
  try{
