@@ -18,7 +18,7 @@ export async function POST(req:NextRequest){
     const systemQuantity=Number(current?.quantity??0);
     const difference=i.countedQuantity-systemQuantity;
     await tx.stockAdjustmentItem.create({data:{adjustmentId:adjustment.id,productId:i.productId,batchId:i.batchId,systemQuantity,countedQuantity:i.countedQuantity,difference}});
-    if(difference!==0)await changeStock(tx,{productId:i.productId,warehouseId:input.warehouseId,batchId:i.batchId,quantity:difference,type:"ADJUSTMENT",referenceType:"STOCK_ADJUSTMENT",referenceId:adjustment.id,notes:input.reason});
+    if(difference!==0)await changeStock(tx,{productId:i.productId,warehouseId:input.warehouseId,batchId:i.batchId,quantity:difference,type:"ADJUSTMENT",referenceType:"STOCK_ADJUSTMENT",referenceId:adjustment.id,notes:input.reason,actorId:auth.userId});
    }
    return adjustment;
   },{isolationLevel:"Serializable"});
