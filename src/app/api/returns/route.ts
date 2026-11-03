@@ -40,19 +40,30 @@ export async function POST(req:NextRequest){
    if(input.kind==="PURCHASE_RETURN"&&!sourcePurchase)throw new Error("Original purchase bill was not found.");
    if(sourceSale&&sourceSale.status!=="APPROVED")throw new Error("Only approved sales invoices can be returned.");
    if(sourcePurchase&&sourcePurchase.status!=="RECEIVED")throw new Error("Only received purchase bills can be returned.");
-   const lines=[];
+   const grouped=new Map<string,{productId:string;batchId:string|undefined;quantity:number}>();
    for(const item of input.items){
+    const key=item.productId+"|"+(item.batchId??"NO_BATCH");
+    const existing=grouped.get(key);
+    if(existing)existing.quantity+=item.quantity;
+    else grouped.set(key,{productId:item.productId,batchId:item.batchId,quantity:item.quantity});
+   }
+   const lines=[];
+   for(const item of grouped.values()){
     const product=await tx.product.findUnique({where:{id:item.productId}});
     if(!product||!product.active)throw new Error("Product is missing or inactive.");
-    let originalQty:number|undefined;
-    let unitCost=Number(product.costPrice);
+    let originalQty:number|undefined,unitCost=Number(product.costPrice),unitValue=0,taxRate=0;
     if(sourceSale){
       const originals=sourceSale.items.filter(x=>x.productId===item.productId&&(x.batchId??null)===(item.batchId??null));
       if(!originals.length)throw new Error("A sales return item must match a product and batch on the original invoice.");
       const soldQuantity=originals.reduce((s,x)=>s+Number(x.quantity),0);
       const previous=await tx.returnItem.aggregate({where:{productId:item.productId,batchId:item.batchId??null,returnDocument:{is:{kind:"SALES_RETURN",sourceSaleId:sourceSale.id,status:"APPROVED"}}},_sum:{quantity:true}});
       originalQty=soldQuantity-Number(previous._sum.quantity??0);
-      unitCost=originals.reduce((s,x)=>s+Number(x.quantity)*Number(x.unitCost),0)/soldQuantity;
+      if(item.quantity>originalQty+0.0001)throw new Error("Return quantity exceeds the unreturned quantity on the original document.");
+      const netBase=originals.reduce((s,x)=>s+Number(x.quantity)*Number(x.unitPrice)-Number(x.discount),0);
+      const taxValue=originals.reduce((s,x)=>s+Number(x.lineTotal)-(Number(x.quantity)*Number(x.unitPrice)-Number(x.discount)),0);
+      unitValue=soldQuantity?netBase/soldQuantity:0;
+      taxRate=netBase>0?taxValue/netBase*100:0;
+      unitCost=soldQuantity?originals.reduce((s,x)=>s+Number(x.quantity)*Number(x.unitCost),0)/soldQuantity:Number(product.costPrice);
     }
     if(sourcePurchase){
       const originals=sourcePurchase.items.filter(x=>x.productId===item.productId&&(x.batchId??null)===(item.batchId??null));
@@ -60,15 +71,20 @@ export async function POST(req:NextRequest){
       const receivedQuantity=originals.reduce((s,x)=>s+Number(x.receivedQuantity),0);
       const previous=await tx.returnItem.aggregate({where:{productId:item.productId,batchId:item.batchId??null,returnDocument:{is:{kind:"PURCHASE_RETURN",sourcePurchaseId:sourcePurchase.id,status:"APPROVED"}}},_sum:{quantity:true}});
       originalQty=receivedQuantity-Number(previous._sum.quantity??0);
-      unitCost=receivedQuantity?originals.reduce((s,x)=>s+Number(x.receivedQuantity)*Number(x.unitCost),0)/receivedQuantity:Number(originals[0].unitCost);
+      if(item.quantity>originalQty+0.0001)throw new Error("Return quantity exceeds the unreturned received quantity on the original bill.");
+      const netBase=originals.reduce((s,x)=>s+Number(x.receivedQuantity)*(Number(x.unitCost)-Number(x.discount)/Math.max(Number(x.quantity),1)),0);
+      const taxValue=originals.reduce((s,x)=>s+Number(x.receivedQuantity)*(Number(x.unitCost)-Number(x.discount)/Math.max(Number(x.quantity),1))*Number(x.taxRate)/100,0);
+      unitValue=receivedQuantity?netBase/receivedQuantity:0;
+      taxRate=netBase>0?taxValue/netBase*100:0;
+      unitCost=receivedQuantity?originals.reduce((s,x)=>s+Number(x.receivedQuantity)*Number(x.unitCost),0)/receivedQuantity:Number(product.costPrice);
     }
-    if(originalQty!==undefined&&item.quantity>originalQty+0.0001)throw new Error("Return quantity exceeds the unreturned quantity on the original document.");
     if(item.batchId){
       const batch=await tx.batch.findUnique({where:{id:item.batchId},select:{productId:true}});
       if(!batch||batch.productId!==item.productId)throw new Error("Selected batch does not match the product.");
     }
-    const base=item.quantity*item.unitValue;
-    lines.push({...item,unitCost,lineTotal:base+base*item.taxRate/100});
+    const base=item.quantity*unitValue;
+    const lineTotal=base+base*taxRate/100;
+    lines.push({...item,unitCost,unitValue,taxRate,lineTotal});
    }
    const subtotal=lines.reduce((s,x)=>s+x.quantity*x.unitValue,0);
    const grandTotal=lines.reduce((s,x)=>s+x.lineTotal,0);
