@@ -27,7 +27,7 @@ export default function HomePage(){
   (i[0]!=="Reports & analytics"||isFinance)&&
   (i[0]!=="Purchases"||canInventory||session?.role==="ACCOUNTANT"||session?.role==="OWNER"||session?.role==="ADMIN"||session?.role==="MANAGER")&&
   (i[0]!=="Payments"&&i[0]!=="Expenses"||isFinance)&&
-  (i[0]!=="Team & roles"&&i[0]!=="Activity log"||["OWNER","ADMIN","ACCOUNTANT"].includes(session?.role||""))
+  (i[0]!=="Team & roles"||session?.role==="OWNER")&&(i[0]!=="Activity log"||["OWNER","ADMIN","ACCOUNTANT"].includes(session?.role||""))
  )})).filter(g=>g.items.length),[query,session?.role,isFinance,canInventory]);
  async function logout(){await fetch("/api/auth/logout",{method:"POST"});router.replace("/login");router.refresh();}
  const expiryRows:AlertRow[]=(alerts?.expiring||[]).slice(0,5);
