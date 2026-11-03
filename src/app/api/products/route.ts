@@ -25,7 +25,7 @@ export async function POST(req:NextRequest){
     if(!warehouseId)throw new Error("Select a warehouse for opening stock");
     let batchId:string|undefined;
     if(batchNumber){const batch=await tx.batch.create({data:{productId:created.id,batchNumber,expiryDate:expiryDate?new Date(expiryDate):undefined,costPrice:created.costPrice}});batchId=batch.id;}
-    await changeStock(tx,{productId:created.id,warehouseId,batchId,quantity:openingStock,type:"OPENING",unitCost:Number(created.costPrice),referenceType:"PRODUCT_OPENING",referenceId:created.id,notes:"Opening stock at product creation"});
+    await changeStock(tx,{productId:created.id,warehouseId,batchId,quantity:openingStock,type:"OPENING",unitCost:Number(created.costPrice),referenceType:"PRODUCT_OPENING",referenceId:created.id,notes:"Opening stock at product creation",actorId:auth.userId});
    }
    return created;
   },{isolationLevel:"Serializable"});
