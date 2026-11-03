@@ -1,3 +1,4 @@
+import {requireRole,denied} from "@/lib/authorization";
 import {NextRequest,NextResponse} from "next/server";
 import {z} from "zod";
 import {prisma} from "@/lib/prisma";
@@ -7,6 +8,7 @@ const schema=z.object({
  items:z.array(z.object({productId:z.string(),batchId:z.string().optional(),countedQuantity:z.number().nonnegative()})).min(1)
 });
 export async function POST(req:NextRequest){
+ const auth=await requireRole(req,["OWNER","ADMIN","MANAGER","INVENTORY"]);if(denied(auth))return auth;
  try{
   const input=schema.parse(await req.json());
   const result=await prisma.$transaction(async tx=>{
