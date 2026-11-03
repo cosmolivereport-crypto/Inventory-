@@ -1,7 +1,9 @@
-import {NextResponse} from "next/server";
+import {requireRole,denied} from "@/lib/authorization";
+import {NextRequest,NextResponse} from "next/server";
 import {prisma} from "@/lib/prisma";
 const indiaDateKey=(value:Date)=>{const p=new Intl.DateTimeFormat("en-GB",{timeZone:"Asia/Kolkata",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(value);const y=p.find(x=>x.type==="year")?.value??"0000",m=p.find(x=>x.type==="month")?.value??"00",d=p.find(x=>x.type==="day")?.value??"00";return y+"-"+m+"-"+d;};
-export async function GET(){
+export async function GET(req:NextRequest){
+ const auth=await requireRole(req,["OWNER","ADMIN","MANAGER","ACCOUNTANT"]);if(denied(auth))return auth;
  try{
   const now=new Date(),todayKey=indiaDateKey(now),cutoffKey=indiaDateKey(new Date(now.getTime()+90*86400000));
   const [productRows,balances,sales,purchases,expenses,receivables,payables,salesReturns,purchaseReturns]=await Promise.all([
