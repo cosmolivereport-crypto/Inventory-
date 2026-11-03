@@ -5,10 +5,38 @@ datasource db {
  provider = "postgresql"
  url = env("DATABASE_URL")
 }
-enum DocumentStatus { DRAFT OPEN APPROVED PARTIAL RECEIVED CANCELLED }
-enum PaymentStatus { UNPAID PARTIAL PAID REFUNDED }
-enum MovementType { PURCHASE SALE PURCHASE_RETURN SALES_RETURN ADJUSTMENT TRANSFER_IN TRANSFER_OUT OPENING }
-enum UserRole { OWNER ADMIN MANAGER INVENTORY STAFF ACCOUNTANT }
+enum DocumentStatus {
+ DRAFT
+ OPEN
+ APPROVED
+ PARTIAL
+ RECEIVED
+ CANCELLED
+}
+enum PaymentStatus {
+ UNPAID
+ PARTIAL
+ PAID
+ REFUNDED
+}
+enum MovementType {
+ PURCHASE
+ SALE
+ PURCHASE_RETURN
+ SALES_RETURN
+ ADJUSTMENT
+ TRANSFER_IN
+ TRANSFER_OUT
+ OPENING
+}
+enum UserRole {
+ OWNER
+ ADMIN
+ MANAGER
+ INVENTORY
+ STAFF
+ ACCOUNTANT
+}
 model User {
  id String @id @default(cuid())
  name String
@@ -88,6 +116,7 @@ model Batch {
  costPrice Decimal @default(0) @db.Decimal(12,2)
  balances StockBalance[]
  movements StockMovement[]
+ purchaseItems PurchaseItem[]
  saleItems SaleItem[]
  @@unique([productId,batchNumber])
  @@index([expiryDate])
