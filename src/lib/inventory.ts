@@ -3,7 +3,7 @@ type Tx = Prisma.TransactionClient;
 
 export async function changeStock(tx:Tx,input:{
   productId:string; warehouseId:string; batchId?:string|null; quantity:number;
-  type:MovementType; unitCost?:number; referenceType?:string; referenceId?:string; notes?:string;
+  type:MovementType; unitCost?:number; referenceType?:string; referenceId?:string; notes?:string; actorId?:string;
 }) {
   if (!Number.isFinite(input.quantity) || input.quantity===0) throw new Error("Movement quantity must be a non-zero number");
   const batchId=input.batchId??null;
@@ -16,15 +16,17 @@ export async function changeStock(tx:Tx,input:{
   }else{
     await tx.stockBalance.create({data:{productId:input.productId,warehouseId:input.warehouseId,batchId,quantity:next}});
   }
-  return tx.stockMovement.create({data:{
+  const movement=await tx.stockMovement.create({data:{
     productId:input.productId,warehouseId:input.warehouseId,batchId,type:input.type,
     quantity:input.quantity,unitCost:input.unitCost,referenceType:input.referenceType,
-    referenceId:input.referenceId,notes:input.notes
+    referenceId:input.referenceId,notes:input.notes,createdBy:input.actorId
   }});
+  await tx.auditLog.create({data:{userId:input.actorId,action:input.type,entity:"STOCK_MOVEMENT",entityId:movement.id,after:{productId:input.productId,warehouseId:input.warehouseId,batchId,quantity:input.quantity,referenceType:input.referenceType,referenceId:input.referenceId}}});
+  return movement;
 }
 
 export async function postSale(tx:Tx,input:{
-  number:string; warehouseId:string; customerId?:string;
+  number:string; warehouseId:string; customerId?:string; actorId?:string;
   items:{productId:string;quantity:number;unitPrice:number;discount?:number;taxRate?:number;batchId?:string}[];
   notes?:string;
 }) {
@@ -52,13 +54,13 @@ export async function postSale(tx:Tx,input:{
   }});
   for(const line of lines) await changeStock(tx,{
     productId:line.productId,warehouseId:input.warehouseId,batchId:line.batchId,
-    quantity:-line.quantity,type:"SALE",referenceType:"SALE",referenceId:sale.id,notes:input.number
+    quantity:-line.quantity,type:"SALE",referenceType:"SALE",referenceId:sale.id,notes:input.number,actorId:input.actorId
   });
   return sale;
 }
 
 export async function postPurchase(tx:Tx,input:{
-  number:string; supplierId:string; warehouseId:string;
+  number:string; supplierId:string; warehouseId:string; actorId?:string;
   items:{productId:string;quantity:number;unitCost:number;discount?:number;taxRate?:number;batchNumber?:string;expiryDate?:string}[];
   notes?:string;
 }) {
@@ -98,7 +100,7 @@ export async function postPurchase(tx:Tx,input:{
   for(const line of lines) await changeStock(tx,{
     productId:line.productId,warehouseId:input.warehouseId,batchId:line.batchId,
     quantity:line.quantity,type:"PURCHASE",unitCost:line.unitCost,
-    referenceType:"PURCHASE",referenceId:purchase.id,notes:input.number
+    referenceType:"PURCHASE",referenceId:purchase.id,notes:input.number,actorId:input.actorId
   });
   return purchase;
 }
