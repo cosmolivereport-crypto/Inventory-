@@ -1,5 +1,6 @@
 import { MovementType, Prisma } from "@prisma/client";
 type Tx = Prisma.TransactionClient;
+const indiaDateKey=(value:Date)=>{const p=new Intl.DateTimeFormat("en-GB",{timeZone:"Asia/Kolkata",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(value);const y=p.find(x=>x.type==="year")?.value??"0000",m=p.find(x=>x.type==="month")?.value??"00",d=p.find(x=>x.type==="day")?.value??"00";return y+"-"+m+"-"+d;};
 
 export async function changeStock(tx:Tx,input:{
   productId:string; warehouseId:string; batchId?:string|null; quantity:number;
@@ -34,7 +35,7 @@ export async function postSale(tx:Tx,input:{
   const productIds=[...new Set(input.items.map(x=>x.productId))];
   const products=await tx.product.findMany({where:{id:{in:productIds},active:true}});
   if(products.length!==productIds.length) throw new Error("One or more products are unavailable");
-  const today=new Date();
+  const todayKey=indiaDateKey(new Date());
   const expanded:{productId:string;batchId:string|null;quantity:number;unitPrice:number;discount:number;taxRate:number;lineTotal:number}[]=[];
   for(const item of input.items){
     const baseTotal=item.quantity*item.unitPrice-(item.discount??0);
@@ -43,7 +44,7 @@ export async function postSale(tx:Tx,input:{
     if(item.batchId){
       const selected=await tx.batch.findUnique({where:{id:item.batchId},select:{productId:true,expiryDate:true}});
       if(!selected||selected.productId!==item.productId)throw new Error("Selected batch does not belong to this SKU");
-      if(selected.expiryDate&&selected.expiryDate<today)throw new Error("Expired batch cannot be sold");
+      if(selected.expiryDate&&indiaDateKey(selected.expiryDate)<todayKey)throw new Error("Expired batch cannot be sold");
       allocations.push({batchId:item.batchId,quantity:item.quantity});
     }else{
       const balances=await tx.stockBalance.findMany({where:{productId:item.productId,warehouseId:input.warehouseId,quantity:{gt:0}},include:{batch:true}});
@@ -54,7 +55,7 @@ export async function postSale(tx:Tx,input:{
       });
       let remaining=item.quantity;
       for(const balance of balances){
-        if(balance.batch?.expiryDate&&balance.batch.expiryDate<today)continue;
+        if(balance.batch?.expiryDate&&indiaDateKey(balance.batch.expiryDate)<todayKey)continue;
         const available=Number(balance.quantity);
         const take=Math.min(available,remaining);
         if(take>0){allocations.push({batchId:balance.batchId,quantity:take});remaining-=take;}
@@ -101,7 +102,7 @@ export async function postPurchase(tx:Tx,input:{
     if(!product) throw new Error("Product not found");
     if(product.trackBatch&&!item.batchNumber)throw new Error("Batch number is required for "+product.name);
     if(product.trackExpiry&&!item.expiryDate)throw new Error("Expiry date is required for "+product.name);
-    if(item.expiryDate&&new Date(item.expiryDate)<=new Date())throw new Error("Cannot receive an already expired batch");
+    if(item.expiryDate&&indiaDateKey(new Date(item.expiryDate))<indiaDateKey(new Date()))throw new Error("Cannot receive an already expired batch");
     const base=item.quantity*item.unitCost-(item.discount??0);
     if(base<0) throw new Error("Discount cannot exceed line value");
     const lineTotal=base+base*(item.taxRate??0)/100;
