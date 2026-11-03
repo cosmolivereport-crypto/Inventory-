@@ -19,9 +19,10 @@ const schema=z.object({
  if(v.kind==="SALES_RETURN"&&!v.sourceSaleId)ctx.addIssue({code:"custom",message:"Select the original sales invoice.",path:["sourceSaleId"]});
  if(v.kind==="PURCHASE_RETURN"&&!v.sourcePurchaseId)ctx.addIssue({code:"custom",message:"Select the original purchase bill.",path:["sourcePurchaseId"]});
 });
-export async function GET(){
+export async function GET(req:NextRequest){
+ const auth=await requireRole(req,["OWNER","ADMIN","MANAGER","INVENTORY","STAFF"]);if(denied(auth))return auth;
  try{
-  const data=await prisma.returnDocument.findMany({include:{customer:true,supplier:true,warehouse:true,sourceSale:true,sourcePurchase:true,items:{include:{product:true,batch:true}}},orderBy:{createdAt:"desc"},take:200});
+  const data=await prisma.returnDocument.findMany({where:auth.role==="STAFF"?{kind:"SALES_RETURN"}:{},include:{customer:true,supplier:true,warehouse:true,sourceSale:true,sourcePurchase:true,items:{include:{product:true,batch:true}}},orderBy:{createdAt:"desc"},take:200});
   return NextResponse.json({data});
  }catch{return NextResponse.json({error:"Could not load return documents"},{status:503});}
 }
@@ -29,6 +30,7 @@ export async function POST(req:NextRequest){
  const auth=await requireRole(req,["OWNER","ADMIN","MANAGER","INVENTORY","STAFF"]);if(denied(auth))return auth;
  try{
   const input=schema.parse(await req.json());
+  if(input.kind==="PURCHASE_RETURN"&&auth.role==="STAFF")return NextResponse.json({error:"Purchase returns require inventory or finance role."},{status:403});
   if(input.kind==="SALES_RETURN"&&input.sourcePurchaseId)throw new Error("Sales return cannot reference a purchase bill.");
   if(input.kind==="PURCHASE_RETURN"&&input.sourceSaleId)throw new Error("Purchase return cannot reference a sales invoice.");
   const data=await prisma.$transaction(async tx=>{
