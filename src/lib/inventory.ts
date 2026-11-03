@@ -9,7 +9,7 @@ export async function changeStock(tx:Tx,input:{
   if (!Number.isFinite(input.quantity) || input.quantity===0) throw new Error("Movement quantity must be a non-zero number");
   const batchId=input.batchId??null;
   const lockKey=input.productId+"|"+input.warehouseId+"|"+(batchId??"NO_BATCH");
-  await tx.$queryRaw` + "`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`" + `;
+  await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`;
   const current=await tx.stockBalance.findFirst({where:{productId:input.productId,warehouseId:input.warehouseId,batchId}});
   const next=Number(current?.quantity??0)+input.quantity;
   if(next<0) throw new Error("Insufficient stock for this SKU, warehouse and batch");
