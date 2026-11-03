@@ -1,6 +1,8 @@
+import {requireRole,denied} from "@/lib/authorization";
 import {NextRequest,NextResponse} from "next/server";
 import {prisma} from "@/lib/prisma";
 export async function GET(req:NextRequest){
+ const auth=await requireRole(req,["OWNER","ADMIN","MANAGER","ACCOUNTANT"]);if(denied(auth))return auth;
  try{
   const fromParam=req.nextUrl.searchParams.get("from"),toParam=req.nextUrl.searchParams.get("to");
   const from=fromParam?new Date(fromParam+"T00:00:00.000Z"):new Date("2000-01-01T00:00:00.000Z");
