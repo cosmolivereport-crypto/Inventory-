@@ -2,7 +2,7 @@
 import {useEffect,useMemo,useState,FormEvent} from "react";
 import {useRouter} from "next/navigation";
 import {ArrowLeft,RefreshCw,RotateCcw} from "lucide-react";
-type SourceItem={productId:string;batchId?:string|null;quantity:string;receivedQuantity?:string;unitPrice?:string;unitCost?:string;taxRate?:string;product:{sku:string;name:string};batch?:{batchNumber:string}|null};
+type SourceItem={productId:string;batchId?:string|null;quantity:string;receivedQuantity?:string;unitPrice?:string;unitCost?:string;discount:string;taxRate:string;lineTotal:string;product:{sku:string;name:string};batch?:{batchNumber:string}|null};
 type SourceDoc={id:string;number:string;grandTotal:string;customer?:{name:string}|null;supplier?:{name:string}|null;items:SourceItem[]};
 type Line={productId:string;batchId:string;label:string;quantity:string;maxQuantity:number;unitValue:string;taxRate:string};
 type ReturnDoc={id:string;number:string;kind:string;grandTotal:string;createdAt:string;customer?:{name:string}|null;supplier?:{name:string}|null;sourceSale?:{number:string}|null;sourcePurchase?:{number:string}|null};
@@ -16,11 +16,16 @@ export default function ReturnsPage(){
   const doc=sourceDocs.find(x=>x.id===id);
   if(!doc){setLines([]);return;}
   const existing=returns.filter(x=>kind==="SALES_RETURN"?x.kind==="SALES_RETURN"&&x.sourceSale?.number===doc.number:x.kind==="PURCHASE_RETURN"&&x.sourcePurchase?.number===doc.number);
-  const fresh=doc.items.map(item=>{
-   const prior=existing.reduce((sum,ret)=>sum+((ret as any).items||[]).filter((r:any)=>r.productId===item.productId&&(r.batchId??null)===(item.batchId??null)).reduce((n:number,r:any)=>n+Number(r.quantity),0),0);
-   const original=Number(kind==="SALES_RETURN"?item.quantity:item.receivedQuantity??item.quantity);
+  const grouped=new Map<string,SourceItem[]>();
+  for(const item of doc.items){const key=item.productId+"|"+(item.batchId??"NO_BATCH");grouped.set(key,[...(grouped.get(key)||[]),item]);}
+  const fresh=[...grouped.values()].map(group=>{
+   const first=group[0];
+   const original=group.reduce((sum,item)=>sum+Number(kind==="SALES_RETURN"?item.quantity:item.receivedQuantity??item.quantity),0);
+   const netBase=group.reduce((sum,item)=>{const q=Number(kind==="SALES_RETURN"?item.quantity:item.receivedQuantity??item.quantity);const ratio=q/Math.max(Number(item.quantity),1);const unit=Number(kind==="SALES_RETURN"?item.unitPrice??0:item.unitCost??0);return sum+q*unit-Number(item.discount||0)*ratio;},0);
+   const taxValue=group.reduce((sum,item)=>{const q=Number(kind==="SALES_RETURN"?item.quantity:item.receivedQuantity??item.quantity);const ratio=q/Math.max(Number(item.quantity),1);const base=Number(item.quantity)*(kind==="SALES_RETURN"?Number(item.unitPrice||0):Number(item.unitCost||0))-Number(item.discount||0);return sum+(Number(item.lineTotal)-base)*ratio;},0);
+   const prior=existing.reduce((sum,ret)=>sum+((ret as any).items||[]).filter((r:any)=>r.productId===first.productId&&(r.batchId??null)===(first.batchId??null)).reduce((n:number,r:any)=>n+Number(r.quantity),0),0);
    const remaining=Math.max(0,original-prior);
-   return {productId:item.productId,batchId:item.batchId??"",label:item.product.sku+" · "+item.product.name+(item.batch?.batchNumber?" · "+item.batch.batchNumber:""),quantity:remaining.toString(),maxQuantity:remaining,unitValue:String(kind==="SALES_RETURN"?item.unitPrice??0:item.unitCost??0),taxRate:String(item.taxRate??0)};
+   return {productId:first.productId,batchId:first.batchId??"",label:first.product.sku+" · "+first.product.name+(first.batch?.batchNumber?" · "+first.batch.batchNumber:""),quantity:remaining.toString(),maxQuantity:remaining,unitValue:String(original?netBase/original:0),taxRate:String(netBase>0?taxValue/netBase*100:0)};
   }).filter(x=>x.maxQuantity>0);
   setLines(fresh);
  }
