@@ -1,0 +1,1 @@
+Prisma validation and database push passed. Build failed on ESLint import path and nullable batch lookup TypeScript error.
