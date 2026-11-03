@@ -1,0 +1,10 @@
+"use client";
+import {FormEvent,useState} from "react";
+import {useRouter} from "next/navigation";
+import {LockKeyhole,Mail,Eye,EyeOff,ArrowRight} from "lucide-react";
+export default function LoginPage(){
+ const [email,setEmail]=useState(""),[password,setPassword]=useState(""),[show,setShow]=useState(false),[error,setError]=useState(""),[busy,setBusy]=useState(false);
+ const router=useRouter();
+ async function submit(e:FormEvent){e.preventDefault();setError("");setBusy(true);try{const r=await fetch("/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email,password})});const d=await r.json();if(!r.ok)throw new Error(d.error||"Could not sign in");router.replace("/");router.refresh();}catch(e){setError(e instanceof Error?e.message:"Sign in failed");}finally{setBusy(false);}}
+ return <main className="login-page"><div className="login-card"><div className="login-brand"><div className="brand-mark">C</div><div><strong>cosmo<span>inventory</span></strong><small>STOCK CONTROL SYSTEM</small></div></div><div className="login-intro"><span>WELCOME BACK</span><h1>Sign in to your workspace</h1><p>Manage your products, stock, purchases and sales securely.</p></div><form onSubmit={submit} className="login-form"><label>Email address<div><Mail size={16}/><input type="email" autoComplete="username" required value={email} onChange={e=>setEmail(e.target.value)} placeholder="name@company.com"/></div></label><label>Password<div><LockKeyhole size={16}/><input type={show?"text":"password"} autoComplete="current-password" required value={password} onChange={e=>setPassword(e.target.value)} placeholder="Enter your password"/><button type="button" onClick={()=>setShow(!show)}>{show?<EyeOff size={16}/>:<Eye size={16}/>}</button></div></label>{error&&<p className="login-error">{error}</p>}<button className="login-submit" disabled={busy}>{busy?"Signing in...":"Sign in"} <ArrowRight size={16}/></button></form><p className="login-foot">Access is restricted to authorised Cosmosentials team members.</p></div><footer>© 2026 Cosmosentials · Inventory Management</footer></main>
+}
