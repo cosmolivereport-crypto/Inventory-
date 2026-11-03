@@ -34,25 +34,55 @@ export async function postSale(tx:Tx,input:{
   const productIds=[...new Set(input.items.map(x=>x.productId))];
   const products=await tx.product.findMany({where:{id:{in:productIds},active:true}});
   if(products.length!==productIds.length) throw new Error("One or more products are unavailable");
-  const lines=input.items.map(i=>{
-    const base=i.quantity*i.unitPrice-(i.discount??0);
-    if(base<0) throw new Error("Discount cannot exceed line value");
-    const tax=base*(i.taxRate??0)/100;
-    return {...i,lineTotal:base+tax};
-  });
-  const subtotal=lines.reduce((s,l)=>s+l.quantity*l.unitPrice,0);
-  const discount=lines.reduce((s,l)=>s+(l.discount??0),0);
-  const taxTotal=lines.reduce((s,l)=>s+l.lineTotal-(l.quantity*l.unitPrice-(l.discount??0)),0);
-  const grandTotal=lines.reduce((s,l)=>s+l.lineTotal,0);
+  const today=new Date();
+  const expanded:{productId:string;batchId:string|null;quantity:number;unitPrice:number;discount:number;taxRate:number;lineTotal:number}[]=[];
+  for(const item of input.items){
+    const baseTotal=item.quantity*item.unitPrice-(item.discount??0);
+    if(baseTotal<0) throw new Error("Discount cannot exceed line value");
+    const allocations:{batchId:string|null;quantity:number}[]=[];
+    if(item.batchId){
+      const selected=await tx.batch.findUnique({where:{id:item.batchId},select:{productId:true,expiryDate:true}});
+      if(!selected||selected.productId!==item.productId)throw new Error("Selected batch does not belong to this SKU");
+      if(selected.expiryDate&&selected.expiryDate<today)throw new Error("Expired batch cannot be sold");
+      allocations.push({batchId:item.batchId,quantity:item.quantity});
+    }else{
+      const balances=await tx.stockBalance.findMany({where:{productId:item.productId,warehouseId:input.warehouseId,quantity:{gt:0}},include:{batch:true}});
+      balances.sort((a,b)=>{
+        const ax=a.batch?.expiryDate?.getTime()??Number.MAX_SAFE_INTEGER;
+        const bx=b.batch?.expiryDate?.getTime()??Number.MAX_SAFE_INTEGER;
+        return ax-bx;
+      });
+      let remaining=item.quantity;
+      for(const balance of balances){
+        if(balance.batch?.expiryDate&&balance.batch.expiryDate<today)continue;
+        const available=Number(balance.quantity);
+        const take=Math.min(available,remaining);
+        if(take>0){allocations.push({batchId:balance.batchId,quantity:take});remaining-=take;}
+        if(remaining<=0)break;
+      }
+      if(remaining>0)throw new Error("Insufficient unexpired stock for "+item.productId+" in the selected warehouse");
+    }
+    for(const allocation of allocations){
+      const ratio=allocation.quantity/item.quantity;
+      const discount=(item.discount??0)*ratio;
+      const base=allocation.quantity*item.unitPrice-discount;
+      const taxRate=item.taxRate??0;
+      expanded.push({productId:item.productId,batchId:allocation.batchId,quantity:allocation.quantity,unitPrice:item.unitPrice,discount,taxRate,lineTotal:base+base*taxRate/100});
+    }
+  }
+  const subtotal=expanded.reduce((s,l)=>s+l.quantity*l.unitPrice,0);
+  const discount=expanded.reduce((s,l)=>s+l.discount,0);
+  const taxTotal=expanded.reduce((s,l)=>s+l.lineTotal-(l.quantity*l.unitPrice-l.discount),0);
+  const grandTotal=expanded.reduce((s,l)=>s+l.lineTotal,0);
   const sale=await tx.sale.create({data:{
     number:input.number,customerId:input.customerId,status:"APPROVED",paymentStatus:"UNPAID",
     subtotal,discount,taxTotal,grandTotal,notes:input.notes,
-    items:{create:lines.map(l=>({
-      productId:l.productId,batchId:l.batchId,quantity:l.quantity,unitPrice:l.unitPrice,
-      discount:l.discount??0,taxRate:l.taxRate??0,lineTotal:l.lineTotal
+    items:{create:expanded.map(l=>({
+      productId:l.productId,batchId:l.batchId??undefined,quantity:l.quantity,unitPrice:l.unitPrice,
+      discount:l.discount,taxRate:l.taxRate,lineTotal:l.lineTotal
     }))}
   }});
-  for(const line of lines) await changeStock(tx,{
+  for(const line of expanded) await changeStock(tx,{
     productId:line.productId,warehouseId:input.warehouseId,batchId:line.batchId,
     quantity:-line.quantity,type:"SALE",referenceType:"SALE",referenceId:sale.id,notes:input.number,actorId:input.actorId
   });
@@ -69,6 +99,9 @@ export async function postPurchase(tx:Tx,input:{
   for(const item of input.items){
     const product=await tx.product.findUnique({where:{id:item.productId}});
     if(!product) throw new Error("Product not found");
+    if(product.trackBatch&&!item.batchNumber)throw new Error("Batch number is required for "+product.name);
+    if(product.trackExpiry&&!item.expiryDate)throw new Error("Expiry date is required for "+product.name);
+    if(item.expiryDate&&new Date(item.expiryDate)<=new Date())throw new Error("Cannot receive an already expired batch");
     const base=item.quantity*item.unitCost-(item.discount??0);
     if(base<0) throw new Error("Discount cannot exceed line value");
     const lineTotal=base+base*(item.taxRate??0)/100;
