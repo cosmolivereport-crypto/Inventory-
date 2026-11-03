@@ -4,14 +4,16 @@ const indiaDateKey=(value:Date)=>{const p=new Intl.DateTimeFormat("en-GB",{timeZ
 export async function GET(){
  try{
   const now=new Date(),todayKey=indiaDateKey(now),cutoffKey=indiaDateKey(new Date(now.getTime()+90*86400000));
-  const [productRows,balances,sales,purchases,expenses,receivables,payables]=await Promise.all([
+  const [productRows,balances,sales,purchases,expenses,receivables,payables,salesReturns,purchaseReturns]=await Promise.all([
    prisma.product.findMany({where:{active:true},select:{id:true,reorderLevel:true,stockBalances:{select:{quantity:true}}}}),
    prisma.stockBalance.findMany({include:{product:true,batch:true}}),
    prisma.sale.aggregate({where:{status:"APPROVED"},_sum:{grandTotal:true}}),
    prisma.purchase.aggregate({where:{status:"RECEIVED"},_sum:{grandTotal:true}}),
    prisma.expense.aggregate({_sum:{amount:true}}),
    prisma.sale.aggregate({where:{status:"APPROVED"},_sum:{grandTotal:true,paidAmount:true}}),
-   prisma.purchase.aggregate({where:{status:"RECEIVED"},_sum:{grandTotal:true,paidAmount:true}})
+   prisma.purchase.aggregate({where:{status:"RECEIVED"},_sum:{grandTotal:true,paidAmount:true}}),
+   prisma.returnDocument.aggregate({where:{kind:"SALES_RETURN",status:"APPROVED"},_sum:{grandTotal:true}}),
+   prisma.returnDocument.aggregate({where:{kind:"PURCHASE_RETURN",status:"APPROVED"},_sum:{grandTotal:true}})
   ]);
   const quantities=productRows.map(p=>({quantity:p.stockBalances.reduce((s,b)=>s+Number(b.quantity),0),reorder:Number(p.reorderLevel)}));
   const expiringWithin90Days=balances.filter(b=>Number(b.quantity)>0&&b.batch?.expiryDate&&indiaDateKey(b.batch.expiryDate)>=todayKey&&indiaDateKey(b.batch.expiryDate)<=cutoffKey).length;
@@ -22,8 +24,11 @@ export async function GET(){
    outOfStock:quantities.filter(x=>x.quantity<=0).length,expiringWithin90Days,
    sales:Number(sales._sum.grandTotal??0),purchases:Number(purchases._sum.grandTotal??0),
    expenses:Number(expenses._sum.amount??0),
-   receivables:Number(receivables._sum.grandTotal??0)-Number(receivables._sum.paidAmount??0),
-   payables:Number(payables._sum.grandTotal??0)-Number(payables._sum.paidAmount??0),
+   receivables:Math.max(0,Number(receivables._sum.grandTotal??0)-Number(receivables._sum.paidAmount??0)-Number(salesReturns._sum.grandTotal??0)),
+   customerCredit:Math.max(0,Number(salesReturns._sum.grandTotal??0)+Number(receivables._sum.paidAmount??0)-Number(receivables._sum.grandTotal??0)),
+   payables:Math.max(0,Number(payables._sum.grandTotal??0)-Number(payables._sum.paidAmount??0)-Number(purchaseReturns._sum.grandTotal??0)),
+   supplierCredit:Math.max(0,Number(purchaseReturns._sum.grandTotal??0)+Number(payables._sum.paidAmount??0)-Number(payables._sum.grandTotal??0)),
+   salesReturns:Number(salesReturns._sum.grandTotal??0),purchaseReturns:Number(purchaseReturns._sum.grandTotal??0),
    asOf:now.toISOString(),timezone:"Asia/Kolkata"
   });
  }catch{return NextResponse.json({error:"Could not calculate inventory summary"},{status:503});}
