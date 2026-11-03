@@ -76,6 +76,7 @@ The seed creates sample categories, a Main Warehouse and demo product SKUs with 
 ## 8. Production checklist
 This repository is not configured with Cosmosentials' live database or deployed hosting yet. Before office use:
 - Provision a managed PostgreSQL database and secure backups; rehearse restore.
+- Keep `SEED_DEMO_DATA=false` in production. Create the initial owner through the seed without creating sample inventory.
 - Set production secrets and initial owner credentials in the hosting provider, never in Git.
 - Deploy the app and verify /api/health reports a database connection.
 - Validate GST place-of-supply, CGST/SGST/IGST, tax rounding, HSN classification and invoice formats with your accountant. The current tax fields are configurable line-rate calculations and are not a complete GST compliance engine.
