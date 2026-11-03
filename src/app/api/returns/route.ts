@@ -45,18 +45,20 @@ export async function POST(req:NextRequest){
     let originalQty:number|undefined;
     let unitCost=Number(product.costPrice);
     if(sourceSale){
-      const original=sourceSale.items.find(x=>x.productId===item.productId&&(x.batchId??null)===(item.batchId??null));
-      if(!original)throw new Error("A sales return item must match a product and batch on the original invoice.");
+      const originals=sourceSale.items.filter(x=>x.productId===item.productId&&(x.batchId??null)===(item.batchId??null));
+      if(!originals.length)throw new Error("A sales return item must match a product and batch on the original invoice.");
+      const soldQuantity=originals.reduce((s,x)=>s+Number(x.quantity),0);
       const previous=await tx.returnItem.aggregate({where:{productId:item.productId,batchId:item.batchId??null,returnDocument:{is:{kind:"SALES_RETURN",sourceSaleId:sourceSale.id,status:"APPROVED"}}},_sum:{quantity:true}});
-      originalQty=Number(original.quantity)-Number(previous._sum.quantity??0);
-      unitCost=Number(original.unitCost);
+      originalQty=soldQuantity-Number(previous._sum.quantity??0);
+      unitCost=originals.reduce((s,x)=>s+Number(x.quantity)*Number(x.unitCost),0)/soldQuantity;
     }
     if(sourcePurchase){
-      const original=sourcePurchase.items.find(x=>x.productId===item.productId&&(x.batchId??null)===(item.batchId??null));
-      if(!original)throw new Error("A purchase return item must match a product and batch on the original bill.");
+      const originals=sourcePurchase.items.filter(x=>x.productId===item.productId&&(x.batchId??null)===(item.batchId??null));
+      if(!originals.length)throw new Error("A purchase return item must match a product and batch on the original bill.");
+      const receivedQuantity=originals.reduce((s,x)=>s+Number(x.receivedQuantity),0);
       const previous=await tx.returnItem.aggregate({where:{productId:item.productId,batchId:item.batchId??null,returnDocument:{is:{kind:"PURCHASE_RETURN",sourcePurchaseId:sourcePurchase.id,status:"APPROVED"}}},_sum:{quantity:true}});
-      originalQty=Number(original.receivedQuantity)-Number(previous._sum.quantity??0);
-      unitCost=Number(original.unitCost);
+      originalQty=receivedQuantity-Number(previous._sum.quantity??0);
+      unitCost=receivedQuantity?originals.reduce((s,x)=>s+Number(x.receivedQuantity)*Number(x.unitCost),0)/receivedQuantity:Number(originals[0].unitCost);
     }
     if(originalQty!==undefined&&item.quantity>originalQty+0.0001)throw new Error("Return quantity exceeds the unreturned quantity on the original document.");
     if(item.batchId){
