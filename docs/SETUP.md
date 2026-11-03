@@ -14,38 +14,45 @@ npm install
 cp .env.example .env
 ```
 
-Set DATABASE_URL in .env to your local PostgreSQL database.
+## 3. Configure environment
+Open `.env` and set:
+- `DATABASE_URL`: your PostgreSQL connection string.
+- `AUTH_SECRET`: a unique random value at least 32 characters long. Generate one with `openssl rand -base64 48`.
+- `INITIAL_ADMIN_NAME`: owner display name.
+- `INITIAL_ADMIN_EMAIL`: owner login email.
+- `INITIAL_ADMIN_PASSWORD`: unique password at least 14 characters long. Do not commit this file.
 
-## 3. Create database and schema
+## 4. Create database and run seed
 ```bash
 createdb cosmo_inventory
 npx prisma generate
-npx prisma migrate dev --name init
+npx prisma db push
 npm run db:seed
 npm run dev
 ```
-Open http://localhost:3000.
+Open http://localhost:3000 and sign in using the owner email and password set in your local `.env`.
 
-## 4. API quick checks
-- GET /api/health
-- GET /api/products
-- POST /api/products
-- GET /api/stock
-- GET /api/stock/movements
-- POST /api/purchases
-- POST /api/sales
-- POST /api/stock/adjustments
-- POST /api/stock/transfers
-- POST /api/returns
-- GET/POST /api/payments
-- GET /api/masters
-- GET /api/reports/summary
+The seed creates sample categories, warehouse and demo products. It only creates the first owner user when the three INITIAL_ADMIN variables are present. Sample products and quantities are illustrative; do not treat them as actual Cosmosentials stock.
 
-All write APIs require a valid database and IDs from that database. The starter API is not yet protected by authentication; do not expose it to the public internet until server-side authentication, authorization, rate limits and audit attribution are implemented.
+## 5. Main API endpoints
+- `GET /api/health` - service check
+- `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/session`
+- `GET /api/products`, `POST /api/products`
+- `GET /api/stock`, `GET /api/stock/movements`
+- `GET /api/purchases`, `POST /api/purchases`
+- `GET /api/sales`, `POST /api/sales`
+- `POST /api/stock/adjustments`, `POST /api/stock/transfers`
+- `POST /api/returns`
+- `GET/POST /api/payments`, `GET/POST /api/expenses`
+- `GET /api/masters`, `GET /api/reports/summary`, `GET /api/alerts`
+- `GET /api/exports/stock` - stock valuation CSV
 
-## 5. Production checklist
-- Add authentication and enforce role permissions in every API.
-- Add robust validation and tests for GST, invoice rounding, refunds, returns and stock concurrency.
-- Configure email/WhatsApp alert provider, scheduled expiry/reorder notifications.
-- Configure object-storage backups and perform restore tests.
-- Configure HTTPS, secrets, monitoring, database migration and deployment.
+All write APIs require a database and valid record IDs. The app has signed-in session protection, but fine-grained role checks and a complete permission matrix still need final review before public production deployment.
+
+## 6. Production checklist
+- Deploy PostgreSQL and set the environment variables in the hosting provider.
+- Run `npx prisma db push` during initial setup; use reviewed migration files for controlled future schema releases.
+- Test login, data isolation, stock concurrency, GST, invoice rounding, returns and payment reconciliation.
+- Configure daily encrypted database backups and test restores.
+- Configure HTTPS, monitoring, secrets rotation, email/WhatsApp providers and scheduled notifications.
+- Never expose database credentials or owner login details in GitHub.
