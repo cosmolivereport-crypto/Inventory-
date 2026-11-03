@@ -1,6 +1,8 @@
+import {requireRole,denied} from "@/lib/authorization";
 import {NextRequest,NextResponse} from "next/server";
 import {prisma} from "@/lib/prisma";
 export async function POST(req:NextRequest){
+ const auth=await requireRole(req,["OWNER","ADMIN","MANAGER"]);if(denied(auth))return auth;
  try{
   const x=await req.json();
   if(typeof x.name!=="string"||!x.name.trim())return NextResponse.json({error:"Name is required"},{status:400});
