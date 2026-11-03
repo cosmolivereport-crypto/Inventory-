@@ -29,7 +29,7 @@ docker compose up -d postgres
 Wait until the database health check reports healthy, then run:
 ~~~bash
 npx prisma generate
-npx prisma db push
+npm run db:migrate -- --name init
 npm run db:seed
 npm run dev
 ~~~
